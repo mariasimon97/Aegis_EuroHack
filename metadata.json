@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Aegis ",
+  "description": "A personal safety navigation system with community contributors, helping users choose the safest route while providing emergency protection and accessibility support.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}

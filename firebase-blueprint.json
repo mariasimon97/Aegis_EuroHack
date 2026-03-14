@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and emergency settings",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "emergency_contacts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "phone": { "type": "string" }
+            }
+          }
+        },
+        "role": { "type": "string" }
+      },
+      "required": ["name", "emergency_contacts"]
+    },
+    "EmergencyAlert": {
+      "title": "Emergency Alert",
+      "description": "An SOS alert triggered by a user",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "resolved"] }
+      },
+      "required": ["user_id", "timestamp", "status"]
+    },
+    "IncidentReport": {
+      "title": "Incident Report",
+      "description": "A safety incident reported by a user",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "type": { "type": "string" },
+        "description": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "type", "latitude", "longitude", "timestamp"]
+    },
+    "RiskZone": {
+      "title": "Risk Zone",
+      "description": "A geographic area with a calculated risk score",
+      "type": "object",
+      "properties": {
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "risk_score": { "type": "number" }
+      },
+      "required": ["latitude", "longitude", "risk_score"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/emergency_alerts/{alertId}": {
+      "schema": "EmergencyAlert",
+      "description": "Active and past emergency alerts"
+    },
+    "/incident_reports/{reportId}": {
+      "schema": "IncidentReport",
+      "description": "Community reported incidents"
+    },
+    "/risk_zones/{zoneId}": {
+      "schema": "RiskZone",
+      "description": "Heatmap data for risk levels"
+    }
+  }
+}

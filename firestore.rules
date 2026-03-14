@@ -1,0 +1,80 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mariareenu7@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['name', 'emergency_contacts']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.emergency_contacts is list && data.emergency_contacts.size() <= 10;
+    }
+
+    function isValidAlert(data) {
+      return data.keys().hasAll(['user_id', 'timestamp', 'status']) &&
+             data.user_id == request.auth.uid &&
+             data.timestamp is string &&
+             data.status in ['active', 'resolved'] &&
+             (!('latitude' in data) || data.latitude is number) &&
+             (!('longitude' in data) || data.longitude is number);
+    }
+
+    function isValidIncident(data) {
+      return data.keys().hasAll(['user_id', 'type', 'latitude', 'longitude', 'timestamp']) &&
+             data.user_id == request.auth.uid &&
+             data.type is string && data.type.size() > 0 &&
+             data.latitude is number &&
+             data.longitude is number &&
+             data.timestamp is string;
+    }
+
+    function isValidRiskZone(data) {
+      return data.keys().hasAll(['latitude', 'longitude', 'risk_score']) &&
+             data.latitude is number &&
+             data.longitude is number &&
+             data.risk_score is number && data.risk_score >= 0 && data.risk_score <= 100;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == 'user' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /emergency_alerts/{alertId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAlert(request.resource.data);
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.user_id || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /incident_reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidIncident(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    match /risk_zones/{zoneId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+  }
+}
