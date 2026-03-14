@@ -19,8 +19,10 @@ export default function BlindMode() {
   const touchStartRef = useRef<{ x: number, y: number, time: number } | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [isListening, setIsListening] = useState(false);
+
   useEffect(() => {
-    speak('Blind mode activated. Tap anywhere to hear status. Swipe Right to Navigate. Swipe Left to Report. Swipe Down to Exit. Hold for 2 seconds for SOS.');
+    speak('Blind mode activated. Tap anywhere to hear status. Swipe Right to search for a destination. Swipe Left for Quick Escape to a safe place. Swipe Down to Exit. Hold for 2 seconds for SOS.');
     return () => {
       window.speechSynthesis.cancel();
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
@@ -49,40 +51,79 @@ export default function BlindMode() {
   };
 
   const handleTap = () => {
+    if (isListening) return;
     vibrate(100);
     if (location) {
-      speak('Location acquired. You are currently in a safe zone. Nearest police station is 200 meters away.');
-      updateUI("STATUS:\nSafe Zone.\nNearest help: 200m");
+      speak('Location acquired. You are currently in a safe zone.');
+      updateUI("STATUS:\nSafe Zone.");
     } else {
       speak('Acquiring location. Please wait.');
       updateUI("ACQUIRING LOCATION...");
     }
     
     setTimeout(() => {
-      updateUI("BLIND MODE ACTIVE\n\nTap anywhere to hear status.\nSwipe Right to Navigate.\nSwipe Left to Report.\nSwipe Down to Exit.\nHold for 2 seconds for SOS.");
+      updateUI("BLIND MODE ACTIVE\n\nTap anywhere to hear status.\nSwipe Right to Search.\nSwipe Left for Quick Escape.\nSwipe Down to Exit.\nHold for 2 seconds for SOS.");
     }, 5000);
   };
 
   const handleSwipeRight = () => {
+    if (isListening) return;
     vibrate([100, 50, 100]);
-    speak('Navigating to nearest safe place. Turn right in 50 meters.');
-    updateUI("NAVIGATING\nTO SAFE PLACE", "bg-purple-900", "text-white");
+    speak("Where do you want to go?");
+    updateUI("LISTENING...\nWhere to?", "bg-purple-900", "text-white");
+    setIsListening(true);
     
     setTimeout(() => {
-      navigate('/navigate?dest=Nearest+Safe+Place&safe=true', { replace: true });
-    }, 2500);
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onresult = (event: any) => {
+          const spokenText = event.results[0][0].transcript;
+          speak(`Searching for ${spokenText}`);
+          updateUI(`SEARCHING FOR\n${spokenText.toUpperCase()}`, "bg-purple-950", "text-white");
+          setTimeout(() => {
+            navigate(`/navigate?blind=true&dest=${encodeURIComponent(spokenText)}`);
+          }, 1500);
+          setIsListening(false);
+        };
+
+        recognition.onerror = (event: any) => {
+          speak("Sorry, I didn't catch that. Please swipe right to try again.");
+          updateUI("COULD NOT HEAR\nSwipe Right to try again", "bg-red-900", "text-white");
+          setIsListening(false);
+          setTimeout(() => {
+            updateUI("BLIND MODE ACTIVE\n\nTap anywhere to hear status.\nSwipe Right to Search.\nSwipe Left for Quick Escape.\nSwipe Down to Exit.\nHold for 2 seconds for SOS.");
+          }, 3000);
+        };
+
+        recognition.onend = () => {
+          setIsListening(false);
+        };
+
+        recognition.start();
+      } else {
+        speak("Voice recognition is not supported on this device.");
+        updateUI("VOICE NOT SUPPORTED", "bg-red-900", "text-white");
+        setIsListening(false);
+      }
+    }, 2000);
   };
 
   const handleSwipeLeft = () => {
+    if (isListening) return;
     vibrate(200);
-    speak('Recording incident. Please describe the situation after the beep.');
-    updateUI("LISTENING...\nREPORTING INCIDENT", "bg-purple-950", "text-white");
+    speak('Quick Escape activated. Finding nearest safe place.');
+    updateUI("QUICK ESCAPE\nFINDING SAFE PLACE", "bg-red-900", "text-white");
     
     setTimeout(() => {
-      vibrate([100, 50, 100]);
-      speak('Incident reported successfully.');
-      updateUI("INCIDENT REPORTED", "bg-black", "text-purple-400");
-    }, 4000);
+      // Navigate to the Navigation page with checkpoints and blind mode active.
+      // The Navigation page will automatically handle the Quick Escape logic.
+      navigate('/navigate?checkpoints=true&blind=true&quickEscape=true');
+    }, 2000);
   };
 
   const handleSwipeDown = () => {
