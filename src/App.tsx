@@ -6,7 +6,6 @@ import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import Home from './pages/Home';
 import Navigation from './pages/Navigation';
 import ReportIncident from './pages/ReportIncident';
-import BlindMode from './pages/BlindMode';
 import Login from './pages/Login';
 import SOSButton from './components/SOSButton';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -48,14 +47,6 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <ReportIncident />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/blind-mode"
-          element={
-            <ProtectedRoute>
-              <BlindMode />
             </ProtectedRoute>
           }
         />

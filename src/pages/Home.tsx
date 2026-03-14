@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLocation } from '../contexts/LocationContext';
@@ -48,12 +48,29 @@ export default function Home() {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const [destination, setDestination] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [safestRoute, setSafestRoute] = useState(true);
   const [guardianMode, setGuardianMode] = useState(false);
   const [emergencyContacts, setEmergencyContacts] = useState<{ name: string; phone: string }[]>([]);
   const [newContact, setNewContact] = useState({ name: '', phone: '' });
   const [showContactForm, setShowContactForm] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
@@ -80,6 +97,28 @@ export default function Home() {
 
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
+
+  useEffect(() => {
+    if (destination.length > 2 && showSuggestions) {
+      const delayDebounceFn = setTimeout(() => {
+        setIsSearching(true);
+        fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(destination)}&format=json&addressdetails=1&limit=5`)
+          .then(res => res.json())
+          .then(data => {
+            setSuggestions(data);
+            setIsSearching(false);
+          })
+          .catch(err => {
+            console.error("Error fetching suggestions:", err);
+            setIsSearching(false);
+          });
+      }, 500);
+
+      return () => clearTimeout(delayDebounceFn);
+    } else {
+      setSuggestions([]);
+    }
+  }, [destination, showSuggestions]);
 
   useEffect(() => {
     if (user) {
@@ -141,6 +180,12 @@ export default function Home() {
     navigate(`/navigate?dest=${encodeURIComponent(destination)}&safe=${safestRoute}`);
   };
 
+  const handleSelectSuggestion = (suggestion: any) => {
+    const name = suggestion.display_name;
+    setDestination(name);
+    setShowSuggestions(false);
+  };
+
   return (
     <div className={`flex min-h-screen flex-col pb-24 transition-colors duration-300 ${isDarkMode ? 'bg-black text-white' : 'bg-blue-50/30 text-slate-900'}`}>
       {/* Header */}
@@ -192,15 +237,47 @@ export default function Home() {
 
         {/* Search Section */}
         <div className={`mb-8 rounded-2xl p-5 shadow-sm ring-1 transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] ${isDarkMode ? 'bg-purple-950/20 ring-purple-900/50' : 'bg-white ring-blue-100'}`}>
-          <div className={`mb-4 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${isDarkMode ? 'bg-black/50 border border-purple-900/30' : 'bg-blue-50/50'}`}>
-            <MapPin className="h-5 w-5 text-purple-400" />
-            <input
-              type="text"
-              placeholder="Where to?"
-              className={`flex-1 bg-transparent text-lg outline-none placeholder:text-purple-300/50 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-            />
+          <div className="relative" ref={searchContainerRef}>
+            <div className={`mb-4 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors ${isDarkMode ? 'bg-black/50 border border-purple-900/30' : 'bg-blue-50/50'}`}>
+              <MapPin className="h-5 w-5 text-purple-400" />
+              <input
+                type="text"
+                placeholder="Where to?"
+                className={`flex-1 bg-transparent text-lg outline-none placeholder:text-purple-300/50 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}
+                value={destination}
+                onChange={(e) => {
+                  setDestination(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+              />
+            </div>
+
+            {/* Suggestions Dropdown */}
+            {showSuggestions && (suggestions.length > 0 || isSearching) && (
+              <div className={`absolute left-0 right-0 top-full z-[2000] mt-2 max-h-60 overflow-y-auto rounded-xl shadow-lg ring-1 ${isDarkMode ? 'bg-purple-950 ring-purple-800' : 'bg-white ring-blue-100'}`}>
+                {isSearching ? (
+                  <div className="p-4 text-center text-sm text-slate-500">Searching...</div>
+                ) : (
+                  suggestions.map((suggestion, index) => (
+                    <div
+                      key={index}
+                      className={`cursor-pointer border-b px-4 py-3 last:border-0 transition-colors ${isDarkMode ? 'border-purple-900/50 hover:bg-purple-900/50' : 'border-blue-50 hover:bg-blue-50'}`}
+                      onClick={() => handleSelectSuggestion(suggestion)}
+                    >
+                      <p className={`text-sm font-medium ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                        {suggestion.display_name}
+                      </p>
+                      {suggestion.address && suggestion.address.postcode && (
+                        <p className={`text-xs mt-1 ${isDarkMode ? 'text-purple-400' : 'text-blue-600'}`}>
+                          Pincode: {suggestion.address.postcode}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mb-6 flex items-center justify-between px-1">

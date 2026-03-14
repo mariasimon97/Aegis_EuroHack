@@ -139,6 +139,7 @@ export default function Navigation() {
   const [isListening, setIsListening] = useState(false);
   const [routeSteps, setRouteSteps] = useState<any[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  const [lastFetchedLocation, setLastFetchedLocation] = useState<{lat: number, lng: number} | null>(null);
   const announcedNoLocationRef = useRef(false);
   const announcedLocationRef = useRef(false);
 
@@ -178,17 +179,32 @@ export default function Navigation() {
   // Fetch checkpoints using Overpass API
   const fetchCheckpoints = useCallback(async (lat: number, lng: number) => {
     try {
-      const query = `[out:json];(node["amenity"="police"](around:5000,${lat},${lng});node["amenity"="hospital"](around:5000,${lat},${lng});node["amenity"="pharmacy"](around:5000,${lat},${lng}););out body;`;
-      const response = await fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        body: `data=${encodeURIComponent(query)}`
-      });
+      const query = `[out:json][timeout:10];(node["amenity"="police"](around:3000,${lat},${lng});node["amenity"="hospital"](around:3000,${lat},${lng});node["amenity"="pharmacy"](around:3000,${lat},${lng}););out body;`;
+      
+      const endpoints = [
+        'https://overpass-api.de/api/interpreter',
+        'https://lz4.overpass-api.de/api/interpreter',
+        'https://z.overpass-api.de/api/interpreter'
+      ];
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      let response;
+      for (const endpoint of endpoints) {
+        try {
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `data=${encodeURIComponent(query)}`
+          });
+          if (response.ok) break;
+        } catch (err) {
+          console.warn(`Failed to fetch from ${endpoint}:`, err);
+        }
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(`HTTP error! status: ${response ? response.status : 'Unknown'}`);
       }
 
       const text = await response.text();
@@ -236,9 +252,15 @@ export default function Navigation() {
 
   useEffect(() => {
     if (location && (showCheckpointsParam || isBlindMode)) {
-      fetchCheckpoints(location.latitude, location.longitude);
+      const shouldFetch = !lastFetchedLocation || 
+        calculateDistance(location.latitude, location.longitude, lastFetchedLocation.lat, lastFetchedLocation.lng) > 500;
+        
+      if (shouldFetch) {
+        fetchCheckpoints(location.latitude, location.longitude);
+        setLastFetchedLocation({ lat: location.latitude, lng: location.longitude });
+      }
     }
-  }, [location, showCheckpointsParam, isBlindMode, fetchCheckpoints]);
+  }, [location, showCheckpointsParam, isBlindMode, fetchCheckpoints, lastFetchedLocation]);
 
   useEffect(() => {
     if (isBlindMode && checkpoints.length > 0) {
@@ -648,17 +670,6 @@ export default function Navigation() {
         >
           <Volume2 className={`mb-8 h-24 w-24 text-purple-500 ${isListening ? 'animate-bounce' : 'animate-pulse'}`} />
           <h1 className="mb-8 text-3xl font-black text-white tracking-tighter">BLIND MODE ACTIVE</h1>
-          
-          <div className="flex flex-col gap-8 w-full max-w-sm text-left bg-white/10 p-6 rounded-2xl">
-            <div className="flex items-center gap-4">
-              <ArrowLeft className="h-8 w-8 text-red-500" />
-              <p className="text-xl font-bold text-white">Swipe Left for Quick Escape</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <p className="text-xl font-bold text-white text-right flex-1">Swipe Right to Search</p>
-              <ArrowLeft className="h-8 w-8 text-purple-500 rotate-180" />
-            </div>
-          </div>
 
           {isListening && (
             <p className="mt-8 text-2xl font-bold text-purple-400 animate-pulse">Listening...</p>
